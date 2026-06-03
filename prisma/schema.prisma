@@ -1,0 +1,587 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        Int             @id @default(autoincrement())
+  name      String
+  email     String          @unique
+  phoneCode String?
+  phone     String?
+  gender    GenderCategory?
+  photo     String?
+  password  String
+  userType  UserType
+  isActive  Boolean         @default(true)
+  isDeleted Boolean         @default(false)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  refCompanyId           Int?
+  company                Company?                @relation("CompanyUsers", fields: [refCompanyId], references: [id])
+  ownedCompanies         Company[]               @relation("CompanyOwner")
+  userRoles              UserRole[]
+  createdPickups         Pickup[]                @relation("PickupCreatedBy")
+  updatedPickups         Pickup[]                @relation("PickupUpdatedBy")
+  pickupApprovals        PickupApproval[]
+  notifications          Notification[]          @relation("NotificationSender")
+  notificationRecipients NotificationRecipient[]
+  branchInfo             BranchInfo[]
+  refreshTokens          RefreshToken[]
+
+  @@index([email])
+  @@index([phone])
+  @@index([userType])
+  @@index([refCompanyId])
+  @@index([isActive, isDeleted])
+}
+
+model Role {
+  id          Int      @id @default(autoincrement())
+  roleName    String   @unique
+  roleType    RoleType
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userRoles         UserRole[]
+  modulePermissions ModulePermission[]
+
+  @@index([roleType])
+  @@index([isActive])
+}
+
+model Module {
+  id          Int      @id @default(autoincrement())
+  moduleKey   String   @unique
+  moduleName  String
+  description String?
+  parentKey   String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  permissions ModulePermission[]
+
+  @@index([moduleKey])
+  @@index([parentKey])
+}
+
+model ModulePermission {
+  id          Int @id @default(autoincrement())
+  refRoleId   Int
+  refModuleId Int
+
+  canView    Boolean @default(false)
+  canCreate  Boolean @default(false)
+  canUpdate  Boolean @default(false)
+  canDelete  Boolean @default(false)
+  canApprove Boolean @default(false)
+  canAssign  Boolean @default(false)
+  canExport  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  role   Role   @relation(fields: [refRoleId], references: [id], onDelete: Cascade)
+  module Module @relation(fields: [refModuleId], references: [id], onDelete: Cascade)
+
+  @@unique([refRoleId, refModuleId])
+  @@index([refRoleId])
+  @@index([refModuleId])
+}
+
+model UserRole {
+  id        Int      @id @default(autoincrement())
+  refUserId Int
+  refRoleId Int
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [refUserId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [refRoleId], references: [id], onDelete: Cascade)
+
+  @@unique([refUserId, refRoleId])
+  @@index([refUserId])
+  @@index([refRoleId])
+}
+
+model Country {
+  id          Int      @id @default(autoincrement())
+  countryName String   @unique
+  countryCode String?  @unique
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  states    State[]
+  companies Company[]
+  rdinfos   RDInfo[]
+
+  @@index([countryName])
+  @@index([isActive])
+}
+
+model State {
+  id           Int      @id @default(autoincrement())
+  stateName    String
+  stateCode    String?
+  refCountryId Int
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  country   Country   @relation(fields: [refCountryId], references: [id])
+  cities    City[]
+  companies Company[]
+  rdinfos   RDInfo[]
+
+  @@unique([stateName, refCountryId])
+  @@index([stateName])
+  @@index([refCountryId])
+  @@index([isActive])
+}
+
+model City {
+  id         Int      @id @default(autoincrement())
+  cityName   String
+  refStateId Int
+  pinCode    String?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  state     State     @relation(fields: [refStateId], references: [id])
+
+  @@unique([cityName, refStateId])
+  @@index([cityName])
+  @@index([refStateId])
+  @@index([pinCode])
+  @@index([isActive])
+}
+
+model Industry {
+  id           Int      @id @default(autoincrement())
+  industryName String   @unique
+  description  String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  companies Company[]
+
+  @@index([isActive])
+}
+
+// ===========================
+// CLIENT/COMPANY MANAGEMENT
+// ===========================
+
+model Company {
+  id        Int     @id @default(autoincrement())
+  logo      String?
+  name      String
+  email     String  @unique
+  phoneCode String?
+  phone     String
+  website   String?
+
+  // Address
+  address      String
+  pinCode      String
+  cityName     String
+  refStateId   Int
+  refCountryId Int
+
+  // Business Info
+  refIndustryId Int
+  gstNumber     String? @unique
+  gstDocument   String?
+  panNumber     String?
+  panDocument   String?
+
+  // Account Manager (CRM User)
+  refOwnerUserId Int?
+
+  // Status
+  isActive   Boolean @default(true)
+  isVerified Boolean @default(false)
+  isDeleted  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  owner    User?    @relation("CompanyOwner", fields: [refOwnerUserId], references: [id])
+  state    State    @relation(fields: [refStateId], references: [id])
+  country  Country  @relation(fields: [refCountryId], references: [id])
+  industry Industry @relation(fields: [refIndustryId], references: [id])
+
+  users    User[]       @relation("CompanyUsers")
+  branches BranchInfo[]
+  rds      RDInfo[]
+  pickups  Pickup[]
+
+  @@index([email])
+  @@index([gstNumber])
+  @@index([refOwnerUserId])
+  @@index([isActive, isDeleted])
+}
+
+// ===========================
+// RD (RETAIL DESTINATION) MANAGEMENT
+// ===========================
+
+model BranchInfo {
+  id           Int      @id @default(autoincrement())
+  refCompanyId Int
+  branchName   String
+  branchType   String // Distributor, Warehouse
+  createdBy    Int
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company Company  @relation(fields: [refCompanyId], references: [id])
+  user    User?    @relation(fields: [createdBy], references: [id])
+  rdInfo  RDInfo[]
+  pickups Pickup[]
+
+  @@index([refCompanyId])
+}
+
+model RDInfo {
+  id     Int    @id @default(autoincrement())
+  rdCode String @unique
+  rdName String
+
+  // Contact Info
+  contactPersonName  String
+  contactPersonPhone String
+  contactPersonEmail String
+
+  // Location
+  address      String
+  landmark     String?
+  pincode      String
+  cityName     String
+  refStateId   Int
+  refCountryId Int
+
+  // Company Link
+  refCompanyId    Int
+  refBranchInfoId Int
+
+  // Status
+  isActive  Boolean @default(true)
+  isDeleted Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  state      State      @relation(fields: [refStateId], references: [id])
+  country    Country    @relation(fields: [refCountryId], references: [id])
+  company    Company    @relation(fields: [refCompanyId], references: [id])
+  branchInfo BranchInfo @relation(fields: [refBranchInfoId], references: [id])
+
+  pickups Pickup[]
+
+  @@index([rdCode])
+  @@index([refCompanyId])
+  @@index([isActive, isDeleted])
+}
+
+enum PickupWorkflowStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  ASSIGNED
+  IN_PROGRESS
+  PICKED_UP
+  STORED
+  COMPLETED
+  REJECTED
+  CANCELLED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PickupLogAction {
+  CREATED
+  UPDATED
+  STATUS_CHANGED
+  ASSIGNED
+  UNASSIGNED
+  APPROVED
+  REJECTED
+  CANCELLED
+  DELETED
+}
+
+model Pickup {
+  id           Int    @id @default(autoincrement())
+  pickupNumber String @unique //Auto Generate Random
+
+  // References
+  refCompanyId    Int
+  refRDId         Int
+  refBranchInfoId Int?
+
+  // Workflow
+  workflowStatus PickupWorkflowStatus
+  approvalStatus ApprovalStatus       @default(PENDING)
+
+  // Schedule
+  scheduledPickupAt DateTime?
+
+  auditImages String?
+
+  // Actual Pickup
+  actualPickupAt DateTime?
+
+  // Media / Proof
+  pickupImages Json?
+  remark       String?
+
+  // Tracking
+  refCreatedByUserId Int
+  refUpdatedByUserId Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  company    Company     @relation(fields: [refCompanyId], references: [id])
+  rd         RDInfo      @relation(fields: [refRDId], references: [id])
+  branchInfo BranchInfo? @relation(fields: [refBranchInfoId], references: [id])
+  createdBy  User        @relation("PickupCreatedBy", fields: [refCreatedByUserId], references: [id])
+  updatedBy  User?       @relation("PickupUpdatedBy", fields: [refUpdatedByUserId], references: [id])
+
+  items     PickupItem[]
+  approvals PickupApproval[]
+  logs      PickupLog[]
+
+  @@index([pickupNumber])
+  @@index([workflowStatus])
+  @@index([approvalStatus])
+  @@index([refCompanyId])
+  @@index([refRDId])
+  @@index([refBranchInfoId])
+  @@index([refCreatedByUserId])
+  @@index([scheduledPickupAt])
+  @@index([actualPickupAt])
+  @@index([createdAt])
+}
+
+model PickupItem {
+  id           Int      @id @default(autoincrement())
+  refPickupId  Int
+  materialType String?
+  auditWeight  Float?
+  auditBags    Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  pickup Pickup @relation(fields: [refPickupId], references: [id])
+
+  @@index([refPickupId])
+  @@index([materialType])
+}
+
+model PickupApproval {
+  id               Int            @id @default(autoincrement())
+  refPickupId      Int
+  approvalStatus   ApprovalStatus
+  approvedByUserId Int
+  approvalRemarks  String?
+  approvedAt       DateTime       @default(now())
+
+  pickup     Pickup @relation(fields: [refPickupId], references: [id])
+  approvedBy User   @relation(fields: [approvedByUserId], references: [id])
+
+  @@index([refPickupId])
+  @@index([approvalStatus])
+  @@index([approvedByUserId])
+  @@index([approvedAt])
+}
+
+model PickupLog {
+  id          Int             @id @default(autoincrement())
+  refPickupId Int
+  action      PickupLogAction
+
+  // User who performed the action (snapshot — preserved even if user is deleted)
+  refUserId Int
+  userName  String
+  userEmail String
+  userType  UserType
+
+  // Full before/after state snapshots
+  beforeData Json?
+  afterData  Json?
+
+  // Which top-level fields changed (e.g. ["workflowStatus","refAssignedToUserId"])
+  changedFields String[]
+
+  remarks   String?
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  pickup Pickup @relation(fields: [refPickupId], references: [id], onDelete: Cascade)
+
+  @@index([refPickupId])
+  @@index([action])
+  @@index([refUserId])
+  @@index([createdAt])
+}
+
+// PickupStatus is a display/config lookup for workflow status UI (colors, labels).
+// Pickup.workflowStatus (enum) is the authoritative status field.
+model PickupStatus {
+  id          Int      @id @default(autoincrement())
+  statusKey   String   @unique
+  displayName String
+  colorCode   String?
+  sortOrder   Int
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@index([sortOrder])
+  @@index([isActive])
+}
+
+model Notification {
+  id              Int                  @id @default(autoincrement())
+  category        NotificationCategory
+  title           String
+  message         String
+  refSenderUserId Int?
+  referenceType   String?
+  referenceId     Int?
+  actionUrl       String?
+  priority        NotificationPriority @default(NORMAL)
+  isRead          Boolean              @default(false)
+  readAt          DateTime?
+  createdAt       DateTime             @default(now())
+
+  sender     User?                   @relation("NotificationSender", fields: [refSenderUserId], references: [id])
+  recipients NotificationRecipient[]
+
+  @@index([category])
+  @@index([priority])
+  @@index([createdAt])
+}
+
+model NotificationRecipient {
+  id                Int       @id @default(autoincrement())
+  refNotificationId Int
+  refUserId         Int
+  isRead            Boolean   @default(false)
+  readAt            DateTime?
+  createdAt         DateTime  @default(now())
+
+  notification Notification @relation(fields: [refNotificationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [refUserId], references: [id], onDelete: Cascade)
+
+  @@unique([refNotificationId, refUserId])
+  @@index([refUserId])
+  @@index([isRead])
+}
+
+// ===========================
+// AUTH TOKENS
+// ===========================
+
+model RefreshToken {
+  id         Int      @id @default(autoincrement())
+  token      String   @unique
+  refUserId  Int
+  expiresAt  DateTime
+  isRevoked  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [refUserId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([refUserId])
+  @@index([expiresAt])
+}
+
+// ===========================
+// AUDIT & LOGGING
+// ===========================
+
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  refUserId  Int
+  userType   UserType
+  userName   String
+  userEmail  String
+  action     String
+  entityType String
+  entityId   Int?
+  oldValues  String?
+  newValues  String?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([refUserId])
+  @@index([action])
+  @@index([entityType])
+  @@index([createdAt])
+}
+
+// ===========================
+// ENUMS
+// ===========================
+
+enum UserType {
+  CRM_ADMIN
+  CRM_USER
+  CLIENT_ADMIN
+  CLIENT_USER
+}
+
+enum RoleType {
+  CRM_ROLE
+  CLIENT_ROLE
+}
+
+enum GenderCategory {
+  Male
+  Female
+  Other
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ASSIGNED
+  COMPLETED
+  CANCELLED
+}
+
+enum NotificationCategory {
+  PICKUP_REQUEST
+  PICKUP_ASSIGNED
+  PICKUP_COMPLETED
+  APPROVAL_PENDING
+  SYSTEM
+  CLIENT
+}
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
