@@ -14,9 +14,19 @@ async function bootstrap() {
 
   app.use(cookieParser());
 
-  // CORS configuration with cookie support
+  // CORS configuration with cookie support.
+  // Origins are driven by the CORS_ORIGINS env var (comma-separated) so prod /
+  // preview domains can change without a code edit. credentials:true forbids
+  // a wildcard origin, so each allowed origin must be listed explicitly.
+  const allowedOrigins = (
+    process.env.CORS_ORIGINS ?? 'http://localhost:3000,http://localhost:3002'
+  )
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+
   app.enableCors({
-    origin: ['http://localhost:3002', 'http://localhost:3000','https://crm-frontend-byyx6j6jj-rohit92417s-projects.vercel.app'],
+    origin: allowedOrigins,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true, // Enable cookies

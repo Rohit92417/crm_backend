@@ -15,10 +15,14 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 const REFRESH_COOKIE = 'refreshToken';
 const ACCESS_COOKIE  = 'accessToken';
 
+const isProd = process.env.NODE_ENV === 'production';
+
 const cookieBase = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax' as const,
+  // Cross-site (frontend and API on different domains) requires SameSite=None,
+  // which is only valid when Secure is also set. Lax is fine for local dev.
+  secure: isProd,
+  sameSite: isProd ? ('none' as const) : ('lax' as const),
   path: '/',
 };
 
