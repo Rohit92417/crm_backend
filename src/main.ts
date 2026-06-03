@@ -19,7 +19,7 @@ async function bootstrap() {
   // preview domains can change without a code edit. credentials:true forbids
   // a wildcard origin, so each allowed origin must be listed explicitly.
   const allowedOrigins = (
-    process.env.CORS_ORIGINS ?? 'http://localhost:3000,http://localhost:3002'
+    process.env.CORS_ORIGINS ?? 'https://crm-frontend-one-umber.vercel.app,http://localhost:3000,http://localhost:3002'
   )
     .split(',')
     .map((o) => o.trim())
