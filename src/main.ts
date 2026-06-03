@@ -16,7 +16,7 @@ async function bootstrap() {
 
   // CORS configuration with cookie support
   app.enableCors({
-    origin: ['http://localhost:3002', 'http://localhost:3000'],
+    origin: ['http://localhost:3002', 'http://localhost:3000','https://crm-frontend-byyx6j6jj-rohit92417s-projects.vercel.app'],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true, // Enable cookies
@@ -53,7 +53,7 @@ async function bootstrap() {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
   SwaggerModule.setup('api/docs', app as any, document);
 
-  const port = process.env.PORT as string;
+  const port = process.env.PORT as string || 8080;
   await app.listen(port);
   console.log(`Application is running on: http://localhost:${port}`);
   console.log(`Swagger documentation: http://localhost:${port}/api/docs`);
