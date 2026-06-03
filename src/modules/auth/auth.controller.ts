@@ -26,6 +26,31 @@ const cookieBase = {
   path: '/',
 };
 
+/**
+ * Resolve the cookie `Domain` from the client's request host so auth cookies
+ * are scoped to whatever domain the client used to reach the API.
+ *
+ * - An explicit COOKIE_DOMAIN env var always wins (e.g. `.example.com` to share
+ *   cookies across subdomains).
+ * - localhost / bare IPs / *.local get NO domain attribute (host-only cookie):
+ *   browsers reject `Domain=localhost` or `Domain=<ip>`, so we must omit it.
+ */
+function resolveCookieDomain(req: Request): string | undefined {
+  if (process.env.COOKIE_DOMAIN) return process.env.COOKIE_DOMAIN;
+
+  const host = (req.headers.host ?? '').split(':')[0]; // strip any port
+  if (!host || host === 'localhost' || host.endsWith('.local') || /^[\d.]+$/.test(host)) {
+    return undefined; // host-only cookie
+  }
+  return host;
+}
+
+/** Cookie options for the current request, including a request-derived domain. */
+function cookieOptions(req: Request) {
+  const domain = resolveCookieDomain(req);
+  return domain ? { ...cookieBase, domain } : { ...cookieBase };
+}
+
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
@@ -45,17 +70,19 @@ export class AuthController {
   @ApiOperation({ summary: 'Login — returns short-lived access token + sets refresh cookie' })
   async login(
     @Body() loginDto: LoginDto,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.authService.login(loginDto);
+    const opts = cookieOptions(req);
 
     res.cookie(ACCESS_COOKIE, result.accessToken, {
-      ...cookieBase,
+      ...opts,
       maxAge: 15 * 60 * 1000, // 15 minutes
     });
 
     res.cookie(REFRESH_COOKIE, result.refreshToken, {
-      ...cookieBase,
+      ...opts,
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
     });
 
@@ -79,14 +106,15 @@ export class AuthController {
     }
 
     const result = await this.authService.refresh(token);
+    const opts = cookieOptions(req);
 
     res.cookie(ACCESS_COOKIE, result.accessToken, {
-      ...cookieBase,
+      ...opts,
       maxAge: 15 * 60 * 1000,
     });
 
     res.cookie(REFRESH_COOKIE, result.refreshToken, {
-      ...cookieBase,
+      ...opts,
       maxAge: 30 * 24 * 60 * 60 * 1000,
     });
 
@@ -104,8 +132,12 @@ export class AuthController {
     const token = req.cookies?.[REFRESH_COOKIE] as string | undefined;
     if (token) await this.authService.logout(token);
 
-    res.clearCookie(ACCESS_COOKIE,  { path: '/' });
-    res.clearCookie(REFRESH_COOKIE, { path: '/' });
+    // Must match the domain/path the cookies were set with, or the browser
+    // won't clear them.
+    const domain = resolveCookieDomain(req);
+    const clearOpts = domain ? { path: '/', domain } : { path: '/' };
+    res.clearCookie(ACCESS_COOKIE,  clearOpts);
+    res.clearCookie(REFRESH_COOKIE, clearOpts);
 
     return { message: 'Logout successful' };
   }
