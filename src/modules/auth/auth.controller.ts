@@ -27,27 +27,24 @@ const cookieBase = {
 };
 
 /**
- * Resolve the cookie `Domain` from the client's request host so auth cookies
- * are scoped to whatever domain the client used to reach the API.
+ * Resolve the cookie `Domain`.
  *
- * - An explicit COOKIE_DOMAIN env var always wins (e.g. `.example.com` to share
- *   cookies across subdomains).
- * - localhost / bare IPs / *.local get NO domain attribute (host-only cookie):
- *   browsers reject `Domain=localhost` or `Domain=<ip>`, so we must omit it.
+ * Default is HOST-ONLY (no Domain attribute). The frontend calls this API via a
+ * Next.js BFF rewrite proxy, so the browser receives `Set-Cookie` from the
+ * FRONTEND origin — a host-only cookie therefore binds to the client domain
+ * (which is what shows in DevTools). Emitting the backend host here would make
+ * the browser reject the cookie through the proxy (domain mismatch).
+ *
+ * Set COOKIE_DOMAIN explicitly only when frontend and backend share a parent
+ * domain and you want the cookie shared across subdomains (e.g. `.example.com`).
  */
-function resolveCookieDomain(req: Request): string | undefined {
-  if (process.env.COOKIE_DOMAIN) return process.env.COOKIE_DOMAIN;
-
-  const host = (req.headers.host ?? '').split(':')[0]; // strip any port
-  if (!host || host === 'localhost' || host.endsWith('.local') || /^[\d.]+$/.test(host)) {
-    return undefined; // host-only cookie
-  }
-  return host;
+function resolveCookieDomain(): string | undefined {
+  return process.env.COOKIE_DOMAIN || undefined;
 }
 
-/** Cookie options for the current request, including a request-derived domain. */
-function cookieOptions(req: Request) {
-  const domain = resolveCookieDomain(req);
+/** Cookie options for the current request, including an optional shared domain. */
+function cookieOptions() {
+  const domain = resolveCookieDomain();
   return domain ? { ...cookieBase, domain } : { ...cookieBase };
 }
 
@@ -70,11 +67,10 @@ export class AuthController {
   @ApiOperation({ summary: 'Login — returns short-lived access token + sets refresh cookie' })
   async login(
     @Body() loginDto: LoginDto,
-    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.authService.login(loginDto);
-    const opts = cookieOptions(req);
+    const opts = cookieOptions();
 
     res.cookie(ACCESS_COOKIE, result.accessToken, {
       ...opts,
@@ -106,7 +102,7 @@ export class AuthController {
     }
 
     const result = await this.authService.refresh(token);
-    const opts = cookieOptions(req);
+    const opts = cookieOptions();
 
     res.cookie(ACCESS_COOKIE, result.accessToken, {
       ...opts,
@@ -134,7 +130,7 @@ export class AuthController {
 
     // Must match the domain/path the cookies were set with, or the browser
     // won't clear them.
-    const domain = resolveCookieDomain(req);
+    const domain = resolveCookieDomain();
     const clearOpts = domain ? { path: '/', domain } : { path: '/' };
     res.clearCookie(ACCESS_COOKIE,  clearOpts);
     res.clearCookie(REFRESH_COOKIE, clearOpts);
