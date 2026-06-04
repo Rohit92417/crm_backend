@@ -29,17 +29,29 @@ const cookieBase = {
 /**
  * Resolve the cookie `Domain`.
  *
- * Default is HOST-ONLY (no Domain attribute). The frontend calls this API via a
- * Next.js BFF rewrite proxy, so the browser receives `Set-Cookie` from the
- * FRONTEND origin — a host-only cookie therefore binds to the client domain
- * (which is what shows in DevTools). Emitting the backend host here would make
- * the browser reject the cookie through the proxy (domain mismatch).
+ * Default is HOST-ONLY (no Domain attribute): the cookie binds to whatever host
+ * issued `Set-Cookie`. This is the only correct option when the frontend and
+ * backend live on unrelated registrable domains (e.g. `*.vercel.app` calling a
+ * `*.trycloudflare.com` API), because there is no shared parent domain to scope
+ * the cookie to — emitting any Domain there makes the browser reject the cookie
+ * ("Domain attribute was invalid with regards to the current host url").
  *
- * Set COOKIE_DOMAIN explicitly only when frontend and backend share a parent
+ * Set COOKIE_DOMAIN explicitly ONLY when frontend and backend share a parent
  * domain and you want the cookie shared across subdomains (e.g. `.example.com`).
+ * The value must be a bare hostname — no scheme, port, or path. Anything that
+ * looks malformed is ignored (falls back to host-only) to avoid silently
+ * emitting a Domain the browser will reject.
  */
 function resolveCookieDomain(): string | undefined {
-  return process.env.COOKIE_DOMAIN || undefined;
+  const raw = process.env.COOKIE_DOMAIN?.trim();
+  if (!raw) return undefined;
+
+  // A valid Domain attribute is a bare host. Reject anything carrying a scheme,
+  // port, path, or whitespace — those produce the "invalid Domain" rejection.
+  const domain = raw.replace(/^\./, ''); // a leading dot is tolerated by browsers
+  if (/[\s/:]/.test(domain) || domain === 'localhost') return undefined;
+
+  return raw;
 }
 
 /** Cookie options for the current request, including an optional shared domain. */
